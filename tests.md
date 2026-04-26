@@ -3347,3 +3347,43 @@ Composer skill discovery collapses nested `skills/<subskill>/SKILL.md` entries u
 
 #### Rollback/Cleanup
 - None
+
+---
+
+### Feature: Named Cloudflare Tunnel Support (`--tunnel-token`)
+
+#### Feature/Change Name
+CLI flags `--tunnel-token` and `--tunnel-hostname` (and their env-var equivalents `CODEXUI_CLOUDFLARE_TUNNEL_TOKEN` / `CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME`) let users connect a pre-configured Cloudflare Zero Trust named tunnel instead of the ephemeral quick-tunnel.
+
+#### Prerequisites/Setup
+1. A Cloudflare Zero Trust account with a named tunnel created (Tunnels → Create a tunnel → Cloudflared)
+2. The tunnel token copied from the dashboard (Tunnels → your tunnel → Configure → Install and run connector → copy the token string)
+3. `cloudflared` installed and in `PATH` on the server
+4. `codexui` built or installed from this branch
+
+#### Steps
+**Via CLI flags:**
+```
+codexui --tunnel-token <YOUR_TOKEN> --tunnel-hostname myapp.example.com
+```
+**Via environment variables:**
+```
+export CODEXUI_CLOUDFLARE_TUNNEL_TOKEN=<YOUR_TOKEN>
+export CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME=myapp.example.com
+codexui
+```
+
+1. Run one of the commands above
+2. Observe the startup banner
+3. Open the displayed URL (or the hostname shown in your Cloudflare dashboard) in a browser
+
+#### Expected Results
+- Server starts and prints `Codex Web Local is running!`
+- When `--tunnel-hostname` is provided, the banner shows `Tunnel: https://myapp.example.com` and a QR code for that URL
+- When `--tunnel-hostname` is omitted, the banner prints a note that the public hostname is configured in the Cloudflare dashboard (no QR code)
+- Navigating to the hostname in a browser opens the CodexUI interface
+- Without `--tunnel-token`, the existing ephemeral quick-tunnel behaviour is unchanged
+
+#### Rollback/Cleanup
+- `Ctrl+C` to stop the server; `cloudflared` child process is also terminated
+- Remove the env vars if they were exported
