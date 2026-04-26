@@ -51,7 +51,13 @@
             type="button"
             @click="router.push({ name: 'skills' }); isMobile && setSidebarCollapsed(true)"
           >
-            {{ t('Directory') }}
+            <span class="sidebar-skills-link-icon" aria-hidden="true">
+              <IconTablerBolt />
+            </span>
+            <span class="sidebar-skills-link-copy">
+              <span class="sidebar-skills-link-title">{{ t('Skills') }}</span>
+              <span class="sidebar-skills-link-subtitle">{{ t('Plugins, apps, MCPs') }}</span>
+            </span>
           </button>
 
           <SidebarThreadTree :groups="projectGroups" :project-display-name-by-id="projectDisplayNameById"
@@ -198,10 +204,6 @@
                 <span class="sidebar-settings-toggle" :class="{ 'is-on': dictationAutoSend }" />
               </button>
 
-              <button class="sidebar-settings-row" type="button" :title="SETTINGS_HELP.githubTrendingProjects" @click="toggleGithubTrendingProjects">
-                <span class="sidebar-settings-label">{{ t('GitHub trending projects') }}</span>
-                <span class="sidebar-settings-toggle" :class="{ 'is-on': showGithubTrendingProjects }" />
-              </button>
               <div class="sidebar-settings-row sidebar-settings-row--select" :title="t('Choose the API provider for the Codex backend')">
                 <span class="sidebar-settings-label">{{ t('Provider') }}</span>
                 <select
@@ -457,7 +459,7 @@
         :style="contentStyle"
       >
         <span v-if="isVirtualKeyboardOpen" class="content-keyboard-spacer" aria-hidden="true" />
-        <ContentHeader :title="contentTitle">
+        <ContentHeader :title="contentTitle" :accent="isSkillsRoute">
           <template #leading>
             <SidebarThreadControls
               v-if="isSidebarCollapsed || isMobile"
@@ -467,6 +469,9 @@
               @toggle-sidebar="setSidebarCollapsed(!isSidebarCollapsed)"
               @start-new-thread="onStartNewThreadFromToolbar"
             />
+            <span v-if="isSkillsRoute" class="skills-route-header-icon" aria-hidden="true">
+              <IconTablerBolt />
+            </span>
           </template>
           <template #actions>
             <button
@@ -525,6 +530,35 @@
                     {{ t('Create Project') }}
                   </button>
                 </div>
+                <section v-if="showFirstLaunchPluginsCard" class="new-thread-launch-card" aria-label="Plugins and Apps announcement">
+                  <div class="new-thread-launch-card-copy">
+                    <div class="new-thread-launch-card-topline">
+                      <span class="new-thread-launch-card-badge" aria-hidden="true">
+                        <IconTablerBolt />
+                      </span>
+                      <p class="new-thread-launch-card-eyebrow">{{ t('New in Codex') }}</p>
+                    </div>
+                    <h2 class="new-thread-launch-card-title">{{ t('Plugins are here') }}</h2>
+                    <p class="new-thread-launch-card-text">
+                      {{ t('Hook Codex up to Gmail, Calendar, GitHub, Slack, Browser Use, and more so it can actually help with real work right away.') }}
+                    </p>
+                    <div class="new-thread-launch-card-pills" aria-label="Example integrations">
+                      <span class="new-thread-launch-card-pill">Gmail</span>
+                      <span class="new-thread-launch-card-pill">Calendar</span>
+                      <span class="new-thread-launch-card-pill">GitHub</span>
+                      <span class="new-thread-launch-card-pill">Slack</span>
+                      <span class="new-thread-launch-card-pill">Browser Use</span>
+                    </div>
+                  </div>
+                  <div class="new-thread-launch-card-actions">
+                    <button class="new-thread-launch-card-button new-thread-launch-card-button-primary" type="button" @click="onOpenPluginsHomeCard">
+                      {{ t('Explore Plugins & Apps') }}
+                    </button>
+                    <button class="new-thread-launch-card-button" type="button" @click="dismissFirstLaunchPluginsCard">
+                      {{ t('Dismiss') }}
+                    </button>
+                  </div>
+                </section>
                 <Teleport to="body">
                   <div v-if="isExistingFolderPickerOpen" class="new-thread-open-folder-overlay" @click.self="onCloseExistingFolderPanel">
                     <div class="new-thread-open-folder" role="dialog" aria-modal="true" :aria-label="t('Select folder')" @keydown.esc.prevent="onCloseExistingFolderPanel">
@@ -679,45 +713,6 @@
                   <strong class="worktree-init-status-title">{{ worktreeInitStatus.title }}</strong>
                   <span class="worktree-init-status-message">{{ worktreeInitStatus.message }}</span>
                 </div>
-                <div v-if="showGithubTrendingProjects" class="new-thread-trending">
-                  <div class="new-thread-trending-header">
-                    <p class="new-thread-trending-title">{{ t('Trending GitHub projects') }}</p>
-                    <ComposerDropdown
-                      class="new-thread-trending-scope-dropdown"
-                      :model-value="githubTipsScope"
-                      :options="githubTipsScopeOptions"
-                      @update:model-value="onGithubTipsScopeChange"
-                    />
-                  </div>
-                  <p v-if="isTrendingProjectsLoading" class="new-thread-trending-empty">{{ t('Loading trending projects...') }}</p>
-                  <p v-else-if="trendingProjects.length === 0" class="new-thread-trending-empty">
-                    {{ t('Trending repos are unavailable right now.') }}
-                  </p>
-                  <div v-else class="new-thread-trending-list">
-                    <button
-                      v-for="project in trendingProjects"
-                      :key="project.id"
-                      type="button"
-                      class="new-thread-trending-tip"
-                      @click="onSelectTrendingProjectTip(project)"
-                    >
-                      <span class="new-thread-trending-tip-name" :title="project.fullName">
-                        <template v-if="project.owner && project.repo">
-                          <span class="new-thread-trending-tip-name-owner">{{ project.owner }}</span>
-                          <span class="new-thread-trending-tip-name-slash">/</span>
-                          <span class="new-thread-trending-tip-name-repo">{{ project.repo }}</span>
-                        </template>
-                        <template v-else>
-                          <span class="new-thread-trending-tip-name-repo">{{ project.fullName }}</span>
-                        </template>
-                      </span>
-                      <span class="new-thread-trending-tip-meta">{{ formatTrendingTipMeta(project) }}</span>
-                      <span class="new-thread-trending-tip-description">
-                        {{ project.description || t('No description available.') }}
-                      </span>
-                    </button>
-                  </div>
-                </div>
               </div>
 
               <div class="composer-with-queue">
@@ -848,6 +843,7 @@ import RateLimitStatus from './components/content/RateLimitStatus.vue'
 import ComposerDropdown from './components/content/ComposerDropdown.vue'
 import ComposerRuntimeDropdown from './components/content/ComposerRuntimeDropdown.vue'
 import SidebarThreadControls from './components/sidebar/SidebarThreadControls.vue'
+import IconTablerBolt from './components/icons/IconTablerBolt.vue'
 import IconTablerSearch from './components/icons/IconTablerSearch.vue'
 import IconTablerSettings from './components/icons/IconTablerSettings.vue'
 import IconTablerTerminal from './components/icons/IconTablerTerminal.vue'
@@ -861,9 +857,9 @@ import {
   createWorktree,
   getGitBranchState,
   getWorktreeBranchOptions,
-  getGithubProjectsForScope,
   getAccounts,
   createLocalDirectory,
+  getFirstLaunchPluginsCardPreference,
   getHomeDirectory,
   getTelegramConfig,
   getProjectRootSuggestion,
@@ -872,6 +868,7 @@ import {
   getWorkspaceRootsState,
   listLocalDirectories,
   openProjectRoot,
+  persistFirstLaunchPluginsCardPreference,
   removeAccount,
   refreshAccountsFromAuth,
   searchThreads,
@@ -879,7 +876,7 @@ import {
 } from './api/codexGateway'
 import type { ReasoningEffort, SpeedMode, ThreadScrollState, UiAccountEntry, UiRateLimitWindow, UiServerRequest, UiServerRequestReply, UiThreadTokenUsage } from './types/codex'
 import type { ComposerDraftPayload, ThreadComposerExposed } from './components/content/ThreadComposer.vue'
-import type { GithubTipsScope, GithubTrendingProject, LocalDirectoryEntry, TelegramStatus, WorktreeBranchOption } from './api/codexGateway'
+import type { LocalDirectoryEntry, TelegramStatus, WorktreeBranchOption } from './api/codexGateway'
 import { getFreeModeStatus, setFreeMode, setFreeModeCustomKey, setCustomProvider } from './api/codexGateway'
 import { getPathLeafName, getPathParent, normalizePathForUi } from './pathUtils.js'
 
@@ -900,17 +897,18 @@ const SETTINGS_HELP = {
   chatWidth: t('Choose how wide the conversation column and composer can grow on desktop screens.'),
   dictationClickToToggle: t('Use click-to-start and click-to-stop dictation instead of hold-to-talk.'),
   dictationAutoSend: t('Automatically send transcribed dictation when recording stops.'),
-  githubTrendingProjects: t('Show or hide GitHub trending project cards on the new thread screen.'),
   dictationLanguage: t('Choose transcription language or keep auto-detect.'),
 } as const
 
 type ChatWidthMode = 'standard' | 'wide' | 'extra-wide'
 
 type DirectoryTryItemPayload = {
-  kind: 'app' | 'plugin' | 'skill'
+  kind: 'app' | 'plugin' | 'skill' | 'composio'
   name: string
   displayName: string
   skillPath?: string
+  prompt?: string
+  attachedSkills?: Array<{ name: string; path: string }>
 }
 
 type ChatWidthPreset = {
@@ -1110,9 +1108,6 @@ const homeTerminalOpen = ref(false)
 const isTerminalInputFocused = ref(false)
 const isTerminalKeyboardFocusFallbackActive = ref(false)
 const isThreadTerminalAvailable = ref(true)
-const trendingProjects = ref<GithubTrendingProject[]>([])
-const isTrendingProjectsLoading = ref(false)
-const githubTipsScope = ref<GithubTipsScope>('trending-daily')
 const editingQueuedMessageState = ref<{ threadId: string; queueIndex: number } | null>(null)
 const isRouteSyncInProgress = ref(false)
 const directoryTryInFlightKey = ref('')
@@ -1163,7 +1158,6 @@ const DICTATION_CLICK_TO_TOGGLE_KEY = 'codex-web-local.dictation-click-to-toggle
 const DICTATION_AUTO_SEND_KEY = 'codex-web-local.dictation-auto-send.v1'
 const DICTATION_LANGUAGE_KEY = 'codex-web-local.dictation-language.v1'
 
-const GITHUB_TRENDING_PROJECTS_KEY = 'codex-web-local.github-trending-projects.v1'
 const CHAT_WIDTH_KEY = 'codex-web-local.chat-width.v1'
 const MOBILE_RESUME_RELOAD_MIN_HIDDEN_MS = 400
 const sendWithEnter = ref(loadBoolPref(SEND_WITH_ENTER_KEY, true))
@@ -1174,8 +1168,7 @@ const dictationClickToToggle = ref(loadBoolPref(DICTATION_CLICK_TO_TOGGLE_KEY, f
 const dictationAutoSend = ref(loadBoolPref(DICTATION_AUTO_SEND_KEY, true))
 const dictationLanguage = ref(loadDictationLanguagePref())
 const dictationLanguageOptions = computed(() => buildDictationLanguageOptions())
-
-const showGithubTrendingProjects = ref(loadBoolPref(GITHUB_TRENDING_PROJECTS_KEY, false))
+const showFirstLaunchPluginsCard = ref(false)
 const freeModeEnabled = ref(false)
 const freeModeLoading = ref(false)
 const freeModeCustomKey = ref('')
@@ -1235,7 +1228,7 @@ const routeThreadId = computed(() => {
 const isHomeRoute = computed(() => route.name === 'home')
 const isSkillsRoute = computed(() => route.name === 'skills')
 const contentTitle = computed(() => {
-  if (isSkillsRoute.value) return t('Directory')
+  if (isSkillsRoute.value) return t('Skills')
   if (isHomeRoute.value) return t('Start new thread')
   return selectedThread.value?.title ?? t('Choose a thread')
 })
@@ -1329,6 +1322,17 @@ function buildThreadContextTooltip(usage: UiThreadTokenUsage | null): string {
   }
 
   return lines.join('\n')
+}
+
+function dismissFirstLaunchPluginsCard(): void {
+  if (!showFirstLaunchPluginsCard.value) return
+  showFirstLaunchPluginsCard.value = false
+  void persistFirstLaunchPluginsCardPreference(true)
+}
+
+function onOpenPluginsHomeCard(): void {
+  dismissFirstLaunchPluginsCard()
+  void router.push({ name: 'skills' })
 }
 
 const threadContextBadgeState = computed(() => {
@@ -1477,14 +1481,6 @@ const existingFolderFilteredEntries = computed(() => {
   )
 })
 const darkModeMediaQuery = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
-const githubTipsScopeOptions = computed<Array<{ value: GithubTipsScope; label: string }>>(() => [
-  { value: 'search-daily', label: t('Search daily') },
-  { value: 'search-weekly', label: t('Search weekly') },
-  { value: 'search-monthly', label: t('Search monthly') },
-  { value: 'trending-daily', label: t('Trending daily') },
-  { value: 'trending-weekly', label: t('Trending weekly') },
-  { value: 'trending-monthly', label: t('Trending monthly') },
-])
 const chatWidthLabel = computed(() => t(CHAT_WIDTH_PRESETS[chatWidth.value].label))
 const terminalShortcutLabel = computed(() => {
   if (typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform)) {
@@ -1531,15 +1527,13 @@ onMounted(() => {
   darkModeMediaQuery?.addEventListener('change', applyDarkMode)
   void initialize()
   void loadHomeDirectory()
+  void loadFirstLaunchPluginsCardPreference()
   void loadWorkspaceRootOptionsState()
   void refreshDefaultProjectName()
   void refreshTelegramConfig()
   void refreshTelegramStatus()
   void loadFreeModeStatus()
   void refreshThreadTerminalStatus()
-  if (showGithubTrendingProjects.value) {
-    void loadTrendingProjects()
-  }
 })
 
 onUnmounted(() => {
@@ -1650,6 +1644,11 @@ async function refreshTelegramConfig(): Promise<void> {
   } catch (error) {
     telegramConfigError.value = error instanceof Error ? error.message : 'Failed to load Telegram configuration'
   }
+}
+
+async function loadFirstLaunchPluginsCardPreference(): Promise<void> {
+  const preference = await getFirstLaunchPluginsCardPreference()
+  showFirstLaunchPluginsCard.value = preference.dismissed !== true
 }
 
 function parseTelegramAllowedUserIdsInput(value: string): Array<number | '*'> {
@@ -2278,37 +2277,6 @@ function onSubmitThreadMessage(payload: { text: string; imageUrls: string[]; fil
   void sendMessageToSelectedThread(text, payload.imageUrls, payload.skills, payload.mode, payload.fileAttachments, queueInsertIndex)
 }
 
-function formatTrendingTipMeta(project: GithubTrendingProject): string {
-  const stars = new Intl.NumberFormat().format(project.stars)
-  if (project.language) return `${project.language} · ★ ${stars}`
-  return `★ ${stars}`
-}
-
-function onGithubTipsScopeChange(nextValue: string): void {
-  const allowed = new Set<GithubTipsScope>([
-    'search-daily',
-    'search-weekly',
-    'search-monthly',
-    'trending-daily',
-    'trending-weekly',
-    'trending-monthly',
-  ])
-  const scope = allowed.has(nextValue as GithubTipsScope) ? (nextValue as GithubTipsScope) : 'trending-daily'
-  if (githubTipsScope.value === scope) return
-  githubTipsScope.value = scope
-}
-
-function onSelectTrendingProjectTip(project: GithubTrendingProject): void {
-  const composer = homeThreadComposerRef.value
-  if (!composer) return
-  composer.hydrateDraft({
-    text: `Clone this GitHub project and run it: ${project.url}\nThen explain what this project does in very simple words a 5th grader can understand.`,
-    imageUrls: [],
-    fileAttachments: [],
-    skills: [],
-  })
-}
-
 function onEditQueuedMessage(messageId: string): void {
   const queueIndex = selectedThreadQueuedMessages.value.findIndex((item) => item.id === messageId)
   const message = queueIndex >= 0 ? selectedThreadQueuedMessages.value[queueIndex] : undefined
@@ -2685,16 +2653,6 @@ async function loadExistingFolderListing(path: string): Promise<void> {
   }
 }
 
-async function loadTrendingProjects(): Promise<void> {
-  isTrendingProjectsLoading.value = true
-  try {
-    trendingProjects.value = await getGithubProjectsForScope(githubTipsScope.value, 6)
-  } catch {
-    trendingProjects.value = []
-  } finally {
-    isTrendingProjectsLoading.value = false
-  }
-}
 function joinPath(parent: string, child: string): string {
   const rawParent = normalizePathForUi(parent).trim()
   const normalizedChild = normalizePathForUi(child).trim().replace(/^[\\/]+/u, '')
@@ -2946,11 +2904,6 @@ function toggleDictationAutoSend(): void {
   window.localStorage.setItem(DICTATION_AUTO_SEND_KEY, dictationAutoSend.value ? '1' : '0')
 }
 
-
-function toggleGithubTrendingProjects(): void {
-  showGithubTrendingProjects.value = !showGithubTrendingProjects.value
-  window.localStorage.setItem(GITHUB_TRENDING_PROJECTS_KEY, showGithubTrendingProjects.value ? '1' : '0')
-}
 
 async function onProviderChange(provider: string): Promise<void> {
   if (freeModeLoading.value) return
@@ -3311,25 +3264,6 @@ watch(
 )
 
 watch(
-  () => githubTipsScope.value,
-  () => {
-    if (!showGithubTrendingProjects.value) return
-    void loadTrendingProjects()
-  },
-)
-
-watch(
-  () => showGithubTrendingProjects.value,
-  (enabled) => {
-    if (!enabled) {
-      trendingProjects.value = []
-      return
-    }
-    void loadTrendingProjects()
-  },
-)
-
-watch(
   () => newThreadFolderOptions.value,
   (options) => {
     if (options.length === 0) {
@@ -3468,8 +3402,15 @@ async function submitFirstMessageForNewThread(
 }
 
 function buildDirectoryTryPrompt(payload: DirectoryTryItemPayload): string {
+  if (payload.prompt?.trim()) return payload.prompt.trim()
   const label = payload.displayName.trim() || payload.name.trim()
-  const itemType = payload.kind === 'skill' ? 'skill' : payload.kind === 'plugin' ? 'plugin' : 'app'
+  const itemType = payload.kind === 'skill'
+    ? 'skill'
+    : payload.kind === 'plugin'
+      ? 'plugin'
+      : payload.kind === 'composio'
+        ? 'Composio connector'
+        : 'app'
   return `Test ${label} ${itemType}. Give me a list of what it can do and one useful example.`
 }
 
@@ -3481,7 +3422,9 @@ async function onTryDirectoryItem(payload: DirectoryTryItemPayload): Promise<voi
   if (directoryTryInFlightKey.value) return
   directoryTryInFlightKey.value = getDirectoryTryItemKey(payload)
   const text = buildDirectoryTryPrompt(payload)
-  const skills = payload.kind === 'skill' && payload.skillPath
+  const skills = payload.attachedSkills?.length
+    ? payload.attachedSkills
+    : payload.kind === 'skill' && payload.skillPath
     ? [{ name: payload.name, path: payload.skillPath }]
     : []
   try {
@@ -3587,15 +3530,51 @@ async function loadWorktreeBranches(sourceCwd: string): Promise<void> {
 }
 
 .sidebar-skills-link {
-  @apply mx-2 flex items-center rounded-lg border-0 bg-transparent px-2 py-1.5 text-sm text-zinc-600 transition hover:bg-zinc-200 hover:text-zinc-900 cursor-pointer;
+  @apply mx-2 flex items-center gap-3 rounded-2xl border border-transparent bg-transparent px-3 py-2.5 text-left text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-950 cursor-pointer;
 }
 
 .sidebar-skills-link.is-active {
-  @apply bg-zinc-200 text-zinc-900 font-medium;
+  @apply border-transparent bg-zinc-100 text-zinc-950;
+}
+
+.sidebar-skills-link-icon {
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white;
+}
+
+.sidebar-skills-link-icon :deep(svg) {
+  @apply h-5 w-5;
+}
+
+.sidebar-skills-link-copy {
+  @apply flex min-w-0 flex-col;
+}
+
+.sidebar-skills-link-title {
+  @apply truncate text-sm font-semibold leading-5 tracking-[-0.01em];
+}
+
+.sidebar-skills-link-subtitle {
+  @apply truncate text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-500;
 }
 
 .sidebar-thread-controls-header-host {
   @apply ml-1;
+}
+
+.skills-route-header-icon {
+  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-[0_16px_32px_-20px_rgba(5,150,105,0.9)];
+}
+
+.skills-route-header-icon :deep(svg) {
+  @apply h-4.5 w-4.5;
+}
+
+:global(:root.dark) .sidebar-skills-link-title {
+  @apply text-zinc-50;
+}
+
+:global(:root.dark) .sidebar-skills-link-subtitle {
+  @apply text-zinc-400;
 }
 
 .content-body {
@@ -3720,6 +3699,90 @@ async function loadWorktreeBranches(sourceCwd: string): Promise<void> {
 
 .new-thread-folder-actions {
   @apply mt-3 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2;
+}
+
+.new-thread-launch-card {
+  @apply mt-4 w-full max-w-3xl rounded-[28px] border border-emerald-200 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.2),_transparent_42%),linear-gradient(135deg,_#f4fff8,_#ffffff_58%)] px-5 py-5 text-left shadow-[0_18px_50px_-28px_rgba(5,150,105,0.45)];
+}
+
+.new-thread-launch-card-copy {
+  @apply flex flex-col gap-2;
+}
+
+.new-thread-launch-card-topline {
+  @apply flex items-center gap-2;
+}
+
+.new-thread-launch-card-badge {
+  @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-emerald-700 text-white shadow-[0_12px_28px_-18px_rgba(5,150,105,0.9)];
+}
+
+.new-thread-launch-card-badge :deep(svg) {
+  @apply h-4 w-4;
+}
+
+.new-thread-launch-card-eyebrow {
+  @apply m-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-700;
+}
+
+.new-thread-launch-card-title {
+  @apply m-0 text-xl font-semibold leading-tight text-zinc-950 sm:text-2xl;
+}
+
+.new-thread-launch-card-text {
+  @apply m-0 max-w-2xl text-sm leading-6 text-zinc-700 sm:text-[15px];
+}
+
+.new-thread-launch-card-actions {
+  @apply mt-4 flex flex-wrap items-center gap-2;
+}
+
+.new-thread-launch-card-pills {
+  @apply mt-1 flex flex-wrap gap-2;
+}
+
+.new-thread-launch-card-pill {
+  @apply inline-flex items-center rounded-full border border-emerald-100 bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700;
+}
+
+.new-thread-launch-card-button {
+  @apply inline-flex h-10 items-center justify-center rounded-full border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50;
+}
+
+.new-thread-launch-card-button-primary {
+  @apply border-emerald-700 bg-emerald-700 text-white hover:bg-emerald-600;
+}
+
+:global(:root.dark) .new-thread-launch-card {
+  @apply border-emerald-900/80 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.2),_transparent_38%),linear-gradient(135deg,_rgba(6,78,59,0.32),_rgba(24,24,27,0.96)_58%)] shadow-[0_24px_64px_-34px_rgba(16,185,129,0.35)];
+}
+
+:global(:root.dark) .new-thread-launch-card-eyebrow {
+  @apply text-emerald-300;
+}
+
+:global(:root.dark) .new-thread-launch-card-badge {
+  @apply bg-emerald-500 text-white;
+}
+
+:global(:root.dark) .new-thread-launch-card-title {
+  @apply text-zinc-50;
+}
+
+:global(:root.dark) .new-thread-launch-card-text {
+  @apply text-zinc-300;
+}
+
+:global(:root.dark) .new-thread-launch-card-pill {
+  @apply border-emerald-900 bg-zinc-900/70 text-emerald-300;
+}
+
+:global(:root.dark) .new-thread-launch-card-button {
+  @apply border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800;
+}
+
+:global(:root.dark) .new-thread-launch-card-button-primary {
+  @apply border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500;
 }
 
 .new-thread-folder-action {
@@ -3905,71 +3968,6 @@ async function loadWorktreeBranches(sourceCwd: string): Promise<void> {
 
 .new-thread-runtime-help {
   @apply mt-2 mb-0 max-w-3xl text-center text-xs text-zinc-500;
-}
-
-.new-thread-trending {
-  @apply mt-4 w-full max-w-3xl;
-}
-
-.new-thread-trending-header {
-  @apply mb-2 flex items-center justify-between gap-2;
-}
-
-.new-thread-trending-title {
-  @apply m-0 text-xs font-medium uppercase tracking-wide text-zinc-500;
-}
-
-.new-thread-trending-scope-dropdown {
-  @apply min-w-40;
-}
-
-.new-thread-trending-scope-dropdown :deep(.composer-dropdown-trigger) {
-  @apply h-8 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700;
-}
-
-.new-thread-trending-empty {
-  @apply m-0 text-sm text-zinc-500;
-}
-
-.new-thread-trending-list {
-  @apply grid grid-cols-2 sm:grid-cols-3 gap-2;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-}
-
-.new-thread-trending-tip {
-  @apply flex cursor-pointer flex-col items-start gap-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-left transition hover:border-zinc-300 hover:bg-zinc-50;
-  container-type: inline-size;
-}
-
-.new-thread-trending-tip-name {
-  @apply w-full truncate text-sm font-medium text-zinc-900;
-}
-
-.new-thread-trending-tip-name-owner {
-  @apply inline;
-}
-
-.new-thread-trending-tip-name-slash {
-  @apply inline;
-}
-
-.new-thread-trending-tip-name-repo {
-  @apply inline;
-}
-
-@container (max-width: 220px) {
-  .new-thread-trending-tip-name-owner,
-  .new-thread-trending-tip-name-slash {
-    display: none;
-  }
-}
-
-.new-thread-trending-tip-meta {
-  @apply text-xs text-zinc-500;
-}
-
-.new-thread-trending-tip-description {
-  @apply line-clamp-2 text-xs text-zinc-600;
 }
 
 .worktree-init-status {

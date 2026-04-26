@@ -155,6 +155,82 @@ export type DirectoryMcpLoginResult = {
   authorizationUrl: string
 }
 
+export type DirectoryComposioStatus = {
+  available: boolean
+  authenticated: boolean
+  cliVersion: string
+  email: string
+  defaultOrgName: string
+  defaultOrgId: string
+  webUrl: string
+  baseUrl: string
+  testUserId: string
+}
+
+export type DirectoryComposioConnection = {
+  id: string
+  wordId: string
+  alias: string
+  status: string
+  authScheme: string
+  createdAt: string
+  updatedAt: string
+  isComposioManaged: boolean
+  isDisabled: boolean
+}
+
+export type DirectoryComposioConnector = {
+  slug: string
+  name: string
+  description: string
+  logoUrl: string
+  latestVersion: string
+  toolsCount: number
+  triggersCount: number
+  isNoAuth: boolean
+  enabled: boolean
+  authModes: string[]
+  activeCount: number
+  totalConnections: number
+  connectionStatuses: string[]
+}
+
+export type DirectoryComposioTool = {
+  slug: string
+  name: string
+  description: string
+}
+
+export type DirectoryComposioConnectorDetail = {
+  connector: DirectoryComposioConnector
+  connections: DirectoryComposioConnection[]
+  tools: DirectoryComposioTool[]
+  dashboardUrl: string
+}
+
+export type DirectoryComposioLinkResult = {
+  status: string
+  message: string
+  connectedAccountId: string
+  redirectUrl: string
+  toolkit: string
+  projectType: string
+}
+
+export type DirectoryComposioLoginResult = {
+  status: string
+  message: string
+  loginUrl: string
+  cliKey: string
+  expiresAt: string
+}
+
+export type DirectoryComposioInstallResult = {
+  ok: boolean
+  command: string
+  output: string
+}
+
 type ProviderModelsResponse = {
   data?: unknown
 }
@@ -227,25 +303,6 @@ export type TelegramConfig = {
   allowedUserIds: Array<number | '*'>
 }
 
-export type GithubTrendingProject = {
-  id: number
-  fullName: string
-  owner: string
-  repo: string
-  url: string
-  description: string
-  language: string
-  stars: number
-}
-
-export type GithubTipsScope =
-  | 'search-daily'
-  | 'search-weekly'
-  | 'search-monthly'
-  | 'trending-daily'
-  | 'trending-weekly'
-  | 'trending-monthly'
-
 export type LocalDirectoryEntry = {
   name: string
   path: string
@@ -273,25 +330,6 @@ export type ThreadTerminalAttachInput = {
   cols?: number
   rows?: number
   newSession?: boolean
-}
-
-function normalizeGithubProjectDescription(fullName: string, rawDescription: string): string {
-  const description = rawDescription.trim()
-  if (!description) return ''
-  const escapedName = fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const [owner = '', repo = ''] = fullName.split('/', 2)
-  const escapedOwner = owner.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const escapedRepo = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const ownerRepoSpaced = owner && repo
-    ? `${escapedOwner}\\s*/\\s*${escapedRepo}`
-    : escapedName
-  return description
-    .replace(/^[★☆*\s:|\-]+/u, '')
-    .replace(/^(sponsor|star)\s+/i, '')
-    .replace(new RegExp(`^${escapedName}\\s*[-:|]*\\s*`, 'i'), '')
-    .replace(new RegExp(`^${ownerRepoSpaced}\\s*[-:|]*\\s*`, 'i'), '')
-    .replace(/^(sponsor|star)\s+/i, '')
-    .trim()
 }
 
 export type AccountsListResult = {
@@ -1923,6 +1961,66 @@ export async function startDirectoryMcpLogin(name: string): Promise<DirectoryMcp
   }
 }
 
+export async function getDirectoryComposioStatus(): Promise<DirectoryComposioStatus> {
+  const response = await fetch('/codex-api/composio/status')
+  if (!response.ok) {
+    throw new Error(`Failed to load Composio status (${response.status})`)
+  }
+  return await response.json() as DirectoryComposioStatus
+}
+
+export async function listDirectoryComposioConnectors(query = ''): Promise<DirectoryComposioConnector[]> {
+  const params = new URLSearchParams()
+  if (query.trim()) params.set('query', query.trim())
+  const suffix = params.toString()
+  const response = await fetch(`/codex-api/composio/connectors${suffix ? `?${suffix}` : ''}`)
+  if (!response.ok) {
+    throw new Error(`Failed to list Composio connectors (${response.status})`)
+  }
+  const payload = await response.json() as { data?: DirectoryComposioConnector[] }
+  return Array.isArray(payload.data) ? payload.data : []
+}
+
+export async function readDirectoryComposioConnector(slug: string): Promise<DirectoryComposioConnectorDetail> {
+  const response = await fetch(`/codex-api/composio/connector?slug=${encodeURIComponent(slug)}`)
+  if (!response.ok) {
+    throw new Error(`Failed to load Composio connector (${response.status})`)
+  }
+  return await response.json() as DirectoryComposioConnectorDetail
+}
+
+export async function startDirectoryComposioLogin(slug: string): Promise<DirectoryComposioLinkResult> {
+  const response = await fetch('/codex-api/composio/link', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to start Composio login (${response.status})`)
+  }
+  return await response.json() as DirectoryComposioLinkResult
+}
+
+export async function startDirectoryComposioCliLogin(): Promise<DirectoryComposioLoginResult> {
+  const response = await fetch('/codex-api/composio/login', {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to start Composio CLI login (${response.status})`)
+  }
+  return await response.json() as DirectoryComposioLoginResult
+}
+
+export async function installDirectoryComposioCli(): Promise<DirectoryComposioInstallResult> {
+  const response = await fetch('/codex-api/composio/install', {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to install Composio CLI (${response.status})`)
+  }
+  return await response.json() as DirectoryComposioInstallResult
+}
+
 export async function getAccountRateLimitsResponse(): Promise<GetAccountRateLimitsResponse> {
   return await callRpc<GetAccountRateLimitsResponse>('account/rateLimits/read')
 }
@@ -2462,166 +2560,6 @@ export async function getTelegramStatus(): Promise<TelegramStatus> {
   }
 }
 
-function formatGithubDate(date: Date): string {
-  const year = date.getUTCFullYear()
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-  const day = String(date.getUTCDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-export async function getGithubTrendingProjects(limit = 5): Promise<GithubTrendingProject[]> {
-  const safeLimit = Math.min(10, Math.max(1, Math.floor(limit)))
-  const sinceDate = new Date()
-  sinceDate.setUTCDate(sinceDate.getUTCDate() - 7)
-  const query = new URLSearchParams({
-    q: `created:>=${formatGithubDate(sinceDate)}`,
-    sort: 'stars',
-    order: 'desc',
-    per_page: String(safeLimit),
-  })
-  const response = await fetch(`https://api.github.com/search/repositories?${query.toString()}`, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  })
-  if (!response.ok) {
-    throw new Error(`Failed to fetch GitHub trending projects (${response.status})`)
-  }
-  const payload = (await response.json()) as unknown
-  const record =
-    payload && typeof payload === 'object' && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {}
-  const items = Array.isArray(record.items) ? record.items : []
-  const projects: GithubTrendingProject[] = []
-  for (const item of items) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-    const row = item as Record<string, unknown>
-    const id = typeof row.id === 'number' ? row.id : 0
-    const fullName = typeof row.full_name === 'string' ? row.full_name.trim() : ''
-    const htmlUrl = typeof row.html_url === 'string' ? row.html_url.trim() : ''
-    if (!id || !fullName || !htmlUrl) continue
-    const [owner = '', repo = ''] = fullName.split('/', 2)
-    projects.push({
-      id,
-      fullName,
-      owner,
-      repo,
-      url: htmlUrl,
-      description: normalizeGithubProjectDescription(
-        fullName,
-        typeof row.description === 'string' ? row.description : '',
-      ),
-      language: typeof row.language === 'string' ? row.language.trim() : '',
-      stars: typeof row.stargazers_count === 'number' ? row.stargazers_count : 0,
-    })
-  }
-  return projects
-}
-
-export async function getGithubProjectsForScope(
-  scope: GithubTipsScope,
-  limit = 6,
-): Promise<GithubTrendingProject[]> {
-  const safeLimit = Math.min(10, Math.max(1, Math.floor(limit)))
-  if (scope.startsWith('search-')) {
-    const sinceDate = new Date()
-    if (scope === 'search-daily') sinceDate.setUTCDate(sinceDate.getUTCDate() - 1)
-    else if (scope === 'search-weekly') sinceDate.setUTCDate(sinceDate.getUTCDate() - 7)
-    else sinceDate.setUTCDate(sinceDate.getUTCDate() - 30)
-
-    const query = new URLSearchParams({
-      q: `created:>=${formatGithubDate(sinceDate)}`,
-      sort: 'stars',
-      order: 'desc',
-      per_page: String(safeLimit),
-    })
-    const response = await fetch(`https://api.github.com/search/repositories?${query.toString()}`, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    })
-    if (!response.ok) {
-      throw new Error(`Failed to fetch GitHub search projects (${response.status})`)
-    }
-    const payload = (await response.json()) as unknown
-    const record =
-      payload && typeof payload === 'object' && !Array.isArray(payload)
-        ? (payload as Record<string, unknown>)
-        : {}
-    const items = Array.isArray(record.items) ? record.items : []
-    const projects: GithubTrendingProject[] = []
-    for (const item of items) {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-      const row = item as Record<string, unknown>
-      const id = typeof row.id === 'number' ? row.id : 0
-      const fullName = typeof row.full_name === 'string' ? row.full_name.trim() : ''
-      const htmlUrl = typeof row.html_url === 'string' ? row.html_url.trim() : ''
-      if (!id || !fullName || !htmlUrl) continue
-      const [owner = '', repo = ''] = fullName.split('/', 2)
-      projects.push({
-        id,
-        fullName,
-        owner,
-        repo,
-        url: htmlUrl,
-        description: normalizeGithubProjectDescription(
-          fullName,
-          typeof row.description === 'string' ? row.description : '',
-        ),
-        language: typeof row.language === 'string' ? row.language.trim() : '',
-        stars: typeof row.stargazers_count === 'number' ? row.stargazers_count : 0,
-      })
-    }
-    return projects
-  }
-
-  const since =
-    scope === 'trending-daily'
-      ? 'daily'
-      : scope === 'trending-weekly'
-        ? 'weekly'
-        : 'monthly'
-  const query = new URLSearchParams({ since, limit: String(safeLimit) })
-  const response = await fetch(`/codex-api/github-trending?${query.toString()}`)
-  const payload = (await response.json()) as unknown
-  if (!response.ok) {
-    const message = getErrorMessageFromPayload(payload, 'Failed to fetch GitHub trending projects')
-    throw new Error(message)
-  }
-  const record =
-    payload && typeof payload === 'object' && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {}
-  const data = Array.isArray(record.data) ? record.data : []
-  const projects: GithubTrendingProject[] = []
-  for (const item of data) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-    const row = item as Record<string, unknown>
-    const id = typeof row.id === 'number' ? row.id : 0
-    const fullName = typeof row.fullName === 'string' ? row.fullName.trim() : ''
-    const url = typeof row.url === 'string' ? row.url.trim() : ''
-    if (!id || !fullName || !url) continue
-    const [owner = '', repo = ''] = fullName.split('/', 2)
-    projects.push({
-      id,
-      fullName,
-      owner,
-      repo,
-      url,
-      description: normalizeGithubProjectDescription(
-        fullName,
-        typeof row.description === 'string' ? row.description : '',
-      ),
-      language: typeof row.language === 'string' ? row.language.trim() : '',
-      stars: typeof row.stars === 'number' ? row.stars : 0,
-    })
-  }
-  return projects
-}
-
 function getErrorMessageFromPayload(payload: unknown, fallback: string): string {
   const record = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? (payload as Record<string, unknown>)
@@ -2636,6 +2574,7 @@ function getErrorMessageFromPayload(payload: unknown, fallback: string): string 
 
 export type ThreadTitleCache = { titles: Record<string, string>; order: string[] }
 export type ThreadPinnedState = { threadIds: string[] }
+export type FirstLaunchPluginsCardPreference = { dismissed: boolean }
 
 export async function getThreadTitleCache(): Promise<ThreadTitleCache> {
   try {
@@ -2677,6 +2616,29 @@ export async function persistPinnedThreadIds(threadIds: string[]): Promise<void>
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ threadIds }),
+    })
+  } catch {
+    // Best-effort persist
+  }
+}
+
+export async function getFirstLaunchPluginsCardPreference(): Promise<FirstLaunchPluginsCardPreference> {
+  try {
+    const response = await fetch('/codex-api/preferences/first-launch-plugins-card')
+    if (!response.ok) return { dismissed: false }
+    const envelope = (await response.json()) as { data?: FirstLaunchPluginsCardPreference }
+    return { dismissed: envelope.data?.dismissed === true }
+  } catch {
+    return { dismissed: false }
+  }
+}
+
+export async function persistFirstLaunchPluginsCardPreference(dismissed: boolean): Promise<void> {
+  try {
+    await fetch('/codex-api/preferences/first-launch-plugins-card', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dismissed }),
     })
   } catch {
     // Best-effort persist

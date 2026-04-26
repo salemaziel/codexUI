@@ -129,51 +129,46 @@ This file tracks manual regression and feature verification steps.
 #### Rollback/Cleanup
 - Remove the selected skill chip(s) before leaving the thread, if needed.
 
-### Feature: Skills Hub manual search trigger
+### Feature: Skills Hub local-only installed skills
 
 #### Prerequisites
 - App is running from this repository.
 - Open the `Skills Hub` view.
 
 #### Steps
-1. Type a unique query value in the Skills Hub search input (for example: `docker`), but do not press Enter or click Search yet.
-2. Confirm the browse results do not refresh immediately while typing.
-3. Click the `Search` button.
-4. Change the query text to another value and press Enter in the input.
-5. Clear the query, then click `Search` to reload the default browse list.
+1. Open `Skills Hub`.
+2. Confirm the page shows only locally installed skills.
+3. Confirm there is no remote skill count such as `6818 skills`.
+4. Confirm there are no remote browse cards from the OpenClaw catalog.
 
 #### Expected Results
-- Typing alone does not trigger remote Skills Hub search requests.
-- Results refresh only after explicit submit via the `Search` button or Enter key.
-- Empty-state text (if shown) references the last submitted query.
-- Submitting an empty query returns the default skills listing.
+- Skills Hub does not fetch or display the OpenClaw remote skills catalog.
+- Only locally installed skills are shown.
+- No remote total-count badge is rendered.
 
 #### Rollback/Cleanup
-- Clear the search input and run a blank search to return to default listing.
+- None.
 
-### Feature: Dark theme for trending GitHub projects and local project dropdown
+### Feature: Remove GitHub trending projects from the new-thread screen
 
 #### Prerequisites
 - App is running from this repository.
 - Home/new-thread screen is open.
-- Appearance is set to `Dark` in Settings.
-- `GitHub trending projects` setting is enabled.
+- Any previously saved local storage value for `codex-web-local.github-trending-projects.v1` may still exist from older builds.
 
 #### Steps
-1. On the home/new-thread screen, inspect the `Choose folder` dropdown trigger.
-2. Open the `Choose folder` dropdown and confirm menu/option contrast remains readable in dark mode.
-3. Inspect the `Trending GitHub projects` section title, scope dropdown, and project cards.
-4. Hover a trending project card and the scope dropdown trigger.
-5. Toggle appearance back to `Light`, then return to `Dark`.
+1. Open Settings and inspect the available rows.
+2. Confirm there is no `GitHub trending projects` toggle.
+3. Return to the home/new-thread screen and confirm no trending cards or scope dropdown are shown.
+4. Refresh the page and confirm the UI stays unchanged even if the old local storage key exists.
 
 #### Expected Results
-- Local project dropdown trigger/value uses dark theme colors with readable contrast.
-- Trending section title, empty/loading text, scope dropdown, and cards use dark backgrounds/borders/text.
-- Hover states in dark mode stay visible and do not switch to light backgrounds.
-- Theme switch back/forth preserves correct styling for both controls.
+- Settings no longer offers any GitHub trending projects preference.
+- The home/new-thread screen no longer renders a trending projects section.
+- Refreshing does not restore the removed feature from stale local storage.
 
 #### Rollback/Cleanup
-- Reset appearance to the previous user preference.
+- None.
 
 ### Feature: Dark theme for worktree runtime selector and Skills Hub
 
@@ -2016,27 +2011,6 @@ stays at `source: "NoValues"` permanently. Feature gate `505458` (worktree) retu
 - Quit and relaunch Codex.app normally (without `--remote-debugging-port`) to remove CDP access.
 - The injected gate value persists only in memory for the current app session; restarting Codex.app resets it.
 
-### Feature: GitHub trending projects disabled by default on new chat
-
-#### Prerequisites
-- App is running from this repository.
-- Browser local storage key `codex-web-local.github-trending-projects.v1` is unset (fresh profile or manually removed).
-
-#### Steps
-1. Open the app to the new chat/home screen.
-2. Verify the `Trending GitHub projects` section is not shown.
-3. Open Settings and enable `GitHub trending projects`.
-4. Return to new chat/home and verify the trending section appears.
-5. Refresh the page and verify enabled state persists.
-
-#### Expected Results
-- With no saved preference, trending section is hidden by default.
-- Enabling the setting immediately shows trending projects.
-- Saved preference persists across refresh.
-
-#### Rollback/Cleanup
-- Reset `GitHub trending projects` setting to your preferred state.
-
 ### Feature: Lazy message rendering (windowed conversation)
 
 #### Prerequisites
@@ -3055,6 +3029,28 @@ Remove the legacy npm package reference from the startup welcome log and point u
 
 ---
 
+### Home route no longer crashes on dev startup
+
+#### Feature/Change Name
+Keep the home route mount path working in dev mode.
+
+#### Prerequisites/Setup
+1. Run the app from this repository with `npm run dev`.
+
+#### Steps
+1. Open `http://localhost:5173/#/`.
+2. Wait for the app shell to finish loading.
+3. Open the browser devtools console.
+
+#### Expected Results
+- The home screen renders instead of a black screen.
+- The console does not show an app setup `ReferenceError` during initial mount.
+
+#### Rollback/Cleanup
+- None
+
+---
+
 ### Thread list startup pagination and direct older-thread links
 
 #### Feature/Change Name
@@ -3191,7 +3187,7 @@ Playwright browser runtime profiler captures route timing, Codex API network cou
 ### Codex.app-style Plugins Directory
 
 #### Feature/Change Name
-The `#/skills` route shows a full Skills & Apps directory with Plugins, Apps, MCPs, and Skills tabs.
+The `#/skills` route shows a full Skills & Apps directory with Plugins, Apps, Composio, MCPs, and Skills tabs.
 
 #### Prerequisites/Setup
 1. Dev server running at `http://127.0.0.1:4173`
@@ -3200,7 +3196,7 @@ The `#/skills` route shows a full Skills & Apps directory with Plugins, Apps, MC
 
 #### Steps
 1. Open `http://127.0.0.1:4173/#/skills`
-2. Verify the page title is `Skills & Apps` and the tab row contains `Plugins`, `Apps`, `MCPs`, and `Skills`
+2. Verify the page title is `Skills & Apps` and the tab row contains `Plugins`, `Apps`, `Composio`, `MCPs`, and `Skills`
 3. On `Plugins`, verify plugin cards load, the default sort is `Popular`, and `A-Z`, `Date`, and search controls work
 4. Open a plugin card when one is available and verify description, capabilities, included apps/skills/MCPs, and install/uninstall or enable/disable actions are visible
 5. For an installed plugin with bundled MCP servers, such as Cloudflare, verify each MCP row shows auth status (`Logged in`, `Bearer token`, `Login required`, `Auth unsupported`, or `Status unknown`)
@@ -3215,9 +3211,14 @@ The `#/skills` route shows a full Skills & Apps directory with Plugins, Apps, MC
 14. Install a plugin whose install response includes `appsNeedingAuth`, and verify the first required app login/manage URL opens automatically
 15. Switch Apps sorting to `A-Z` and verify apps reorder alphabetically; switch to `Date` and verify app-server catalog order is restored; switch back to `Popular` and verify casual-user relevant apps are prioritized and capped to 100 when no search is active
 16. Search Apps and verify matching results are not capped to the Popular top 100 list
-17. Switch to `MCPs` and verify MCP server cards show auth status and tool/resource counts, or the unavailable/empty state appears without breaking the page
-18. Verify MCPs also support `Popular`, `A-Z`, `Date`, and search
-19. Switch to `Skills` and verify existing Skills Hub search, install, uninstall, sync, and enable/disable behavior still works
+17. Switch to `Composio` and verify the workspace summary card shows the current Composio CLI login state, or a clear not-installed / not-authenticated message appears
+18. Verify Composio connector cards show real connector details such as tool counts, trigger counts, auth mode, and connection state instead of only aggregate totals
+19. Open a disconnected Composio connector and click `Connect` or `Reconnect`; verify the returned `connect.composio.dev` authorization URL opens
+20. Open a connected Composio connector and verify connection rows show account identifiers and statuses such as `Active` or `Expired`
+21. Click `Try it!` on a connected or no-auth Composio connector and verify a new thread opens with a Composio-specific prompt and the `composio-cli` skill attached
+22. Switch to `MCPs` and verify MCP server cards show auth status and tool/resource counts, or the unavailable/empty state appears without breaking the page
+23. Verify MCPs also support `Popular`, `A-Z`, `Date`, and search
+24. Switch to `Skills` and verify existing Skills Hub search, install, uninstall, sync, and enable/disable behavior still works
 
 #### Expected Results
 - The directory tabs render without a full-page error
@@ -3226,6 +3227,9 @@ The `#/skills` route shows a full Skills & Apps directory with Plugins, Apps, MC
 - App and plugin enable/disable actions update their local card state after a successful config write
 - Plugin detail shows bundled MCP login state and can launch MCP OAuth for `notLoggedIn` servers
 - Disconnected apps are labeled `Login`; connected apps are labeled `Manage`
+- The Composio tab reuses the authenticated local Composio CLI state and does not require a separate app-specific login
+- Composio connector cards and detail views show concrete connector details, connection rows, and useful tool samples
+- Connected or no-auth Composio connectors expose `Try it!`, creating a new chat with the `composio-cli` skill attached
 - Plugin install opens the first required app login/manage page before falling back to bundled MCP OAuth login
 - Connected and enabled apps, plus installed/enabled plugins/skills, expose `Try it!`, creating a new chat with an auto-submitted test prompt
 - Repeated `Try it!` clicks during startup are ignored until the first request resolves, so duplicate threads are not created
@@ -3521,3 +3525,34 @@ Composer collaboration mode changes send `default` explicitly so a thread can le
 
 #### Rollback/Cleanup
 - Archive the test thread if it was created only for verification
+
+---
+
+### First-launch home card for Plugins and Apps
+
+#### Feature/Change Name
+The home route shows a dismissible first-launch card that introduces Plugins and Apps and opens the existing Skills & Apps directory on the Plugins tab.
+
+#### Prerequisites/Setup
+1. Dev server running at `http://127.0.0.1:4173`
+2. Codex global-state preference `first-launch-plugins-card-dismissed` removed or set to `false` before the first check
+3. App loaded on the home/new-thread route
+
+#### Steps
+1. Open the app on the home route with the local storage key removed
+2. Verify the home screen shows a card with the heading `Plugins are here`
+3. Verify the body copy mentions app examples such as Gmail and Calendar
+4. Click `Explore Plugins & Apps`
+5. Verify the app navigates to the `#/skills` route and the `Plugins` tab is active
+6. Return to the home route and verify the card does not reappear
+7. Remove the local storage key again, reload the home route, and click `Dismiss`
+8. Reload the home route once more
+
+#### Expected Results
+- The card appears only when the server-backed dismissal preference is unset or `false`
+- The primary CTA hides the card and opens the Skills & Apps directory
+- The directory opens with `Plugins` selected by default
+- Dismissing the card hides it immediately and keeps it hidden after reload
+
+#### Rollback/Cleanup
+- Remove or set `first-launch-plugins-card-dismissed` to `false` in Codex global state if you want to see the card again
