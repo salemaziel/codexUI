@@ -3,7 +3,7 @@ import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { Server as HttpServer, IncomingMessage } from 'node:http'
 import { existsSync } from 'node:fs'
-import { writeFile, stat } from 'node:fs/promises'
+import { writeFile, stat, realpath } from 'node:fs/promises'
 import express, { type Express, type Request, type Response, type NextFunction } from 'express'
 import { createCodexBridgeMiddleware } from './codexAppServerBridge.js'
 import { createAuthSession } from './authMiddleware.js'
@@ -89,10 +89,23 @@ function isSensitivePath(localPath: string): boolean {
   return SENSITIVE_PATH_SEGMENTS.some((segment) => normalized.includes(`/${segment}`))
 }
 
-function isPathWithinRoot(localPath: string, fsRoot: string | undefined): boolean {
+async function isPathWithinRoot(localPath: string, fsRoot: string | undefined): Promise<boolean> {
   if (!fsRoot) return true
-  const resolvedPath = resolve(localPath)
-  const resolvedRoot = resolve(fsRoot)
+  // Resolve symlinks so a symlink inside the root that points outside cannot bypass the check.
+  // If realpath fails (path does not exist) the path cannot be a symlink and we fall back to
+  // the syntactic resolve() result, which still prevents directory-traversal attacks.
+  let resolvedPath: string
+  let resolvedRoot: string
+  try {
+    resolvedPath = await realpath(localPath)
+  } catch {
+    resolvedPath = resolve(localPath)
+  }
+  try {
+    resolvedRoot = await realpath(fsRoot)
+  } catch {
+    resolvedRoot = resolve(fsRoot)
+  }
   return resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${sep}`)
 }
 
@@ -123,18 +136,19 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
   // 2. Bridge middleware for /codex-api/*
   app.use(bridge)
 
-  // Expose per-process CSRF token to the SPA (localhost-only by the auth layer above)
+  // Expose per-process CSRF token to the SPA (subject to the auth middleware above, which
+  // may allow localhost and trusted Tailscale remotes without a session cookie)
   app.get('/codex-api/csrf-token', (_req, res) => {
     res.json({ token: CSRF_TOKEN })
   })
 
   // Helper: validate a resolved absolute path against fsRoot and the sensitive-path denylist
-  function guardLocalPath(localPath: string, res: Response): boolean {
+  async function guardLocalPath(localPath: string, res: Response): Promise<boolean> {
     if (isSensitivePath(localPath)) {
       res.status(403).json({ error: 'Access to this path is not allowed.' })
       return false
     }
-    if (!isPathWithinRoot(localPath, fsRoot)) {
+    if (!await isPathWithinRoot(localPath, fsRoot)) {
       res.status(403).json({ error: 'Path is outside the permitted filesystem root.' })
       return false
     }
@@ -142,7 +156,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
   }
 
   // 3. Serve local images referenced in markdown (desktop parity for absolute image paths)
-  app.get('/codex-local-image', (req, res) => {
+  app.get('/codex-local-image', async (req, res) => {
     const rawPath = typeof req.query.path === 'string' ? req.query.path : ''
     const localPath = normalizeLocalImagePath(rawPath)
     if (!localPath || !isAbsolute(localPath)) {
@@ -156,7 +170,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       return
     }
 
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
 
     res.type(contentType)
     res.setHeader('Cache-Control', 'private, max-age=300')
@@ -167,7 +181,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
   })
 
   // 4. Serve local files inline for direct file open.
-  app.get('/codex-local-file', (req, res) => {
+  app.get('/codex-local-file', async (req, res) => {
     const rawPath = typeof req.query.path === 'string' ? req.query.path : ''
     const localPath = normalizeLocalPath(rawPath)
     if (!localPath || !isAbsolute(localPath)) {
@@ -175,7 +189,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       return
     }
 
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
 
     res.setHeader('Cache-Control', 'private, no-store')
     res.setHeader('Content-Disposition', 'inline')
@@ -196,7 +210,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       return
     }
 
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
 
     try {
       const fileStat = await stat(localPath)
@@ -221,7 +235,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       return
     }
 
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
 
     try {
       const fileStat = await stat(localPath)
@@ -249,7 +263,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       res.status(400).json({ error: 'Expected absolute local file path.' })
       return
     }
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
     try {
       const fileStat = await stat(localPath)
       if (!fileStat.isFile()) {
@@ -270,7 +284,7 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
       res.status(400).json({ error: 'Expected absolute local file path.' })
       return
     }
-    if (!guardLocalPath(localPath, res)) return
+    if (!await guardLocalPath(localPath, res)) return
     if (!(await isTextEditableFile(localPath))) {
       res.status(415).json({ error: 'Only text-like files are editable.' })
       return

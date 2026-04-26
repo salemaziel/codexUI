@@ -402,7 +402,11 @@ async function startNamedCloudflaredTunnel(command: string, token: string): Prom
 
     // Resolve as soon as cloudflared reports a registered connection; reject on
     // early exit or hard timeout (30s to account for slower auth handshakes).
+    let settled = false
+
     const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
       child.kill('SIGTERM')
       reject(new Error('Timed out waiting for named cloudflared tunnel to connect'))
     }, 30000)
@@ -412,6 +416,8 @@ async function startNamedCloudflaredTunnel(command: string, token: string): Prom
     const handleData = (value: Buffer | string) => {
       const text = String(value)
       if (!CONNECTED_RE.test(text)) return
+      if (settled) return
+      settled = true
       clearTimeout(timeout)
       child.stdout?.off('data', handleData)
       child.stderr?.off('data', handleData)
@@ -419,6 +425,8 @@ async function startNamedCloudflaredTunnel(command: string, token: string): Prom
     }
 
     const onError = (error: Error) => {
+      if (settled) return
+      settled = true
       clearTimeout(timeout)
       reject(new Error(`Failed to start cloudflared named tunnel: ${error.message}`))
     }
@@ -427,11 +435,11 @@ async function startNamedCloudflaredTunnel(command: string, token: string): Prom
     child.stdout?.on('data', handleData)
     child.stderr?.on('data', handleData)
 
-    child.once('exit', (code) => {
+    child.once('exit', (code, signal) => {
+      if (settled) return
+      settled = true
       clearTimeout(timeout)
-      if (code !== null && code !== 0) {
-        reject(new Error(`cloudflared exited with code ${String(code)} before connecting`))
-      }
+      reject(new Error(`cloudflared exited before connecting (code: ${String(code)}, signal: ${String(signal)})`))
     })
   })
 }
@@ -568,7 +576,7 @@ async function startServer(options: {
   const effectiveTunnelToken = options.tunnelToken ?? process.env.CODEXUI_CLOUDFLARE_TUNNEL_TOKEN
   const effectiveTunnelHostname = options.tunnelHostname ?? process.env.CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME
 
-  if (effectiveTunnelToken) {
+  if (effectiveTunnelToken && options.tunnel) {
     // Named tunnel: token supplied by the user from the Cloudflare dashboard.
     // The public hostname is configured there; we only need to connect.
     try {
