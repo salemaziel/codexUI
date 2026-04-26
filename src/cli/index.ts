@@ -387,6 +387,55 @@ async function startCloudflaredTunnel(command: string, localPort: number): Promi
   })
 }
 
+/**
+ * Start a named Cloudflare tunnel using a tunnel token obtained from the
+ * Cloudflare Zero Trust dashboard (Tunnels → your tunnel → Configure → token).
+ * The public hostname is configured in the dashboard, not derived from stdout.
+ */
+async function startNamedCloudflaredTunnel(command: string, token: string): Promise<{
+  process: ReturnType<typeof spawn>
+}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ['tunnel', 'run', '--token', token], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    // Resolve as soon as cloudflared reports a registered connection; reject on
+    // early exit or hard timeout (30s to account for slower auth handshakes).
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM')
+      reject(new Error('Timed out waiting for named cloudflared tunnel to connect'))
+    }, 30000)
+
+    const CONNECTED_RE = /registered tunnel connection|connected to cloudflare/iu
+
+    const handleData = (value: Buffer | string) => {
+      const text = String(value)
+      if (!CONNECTED_RE.test(text)) return
+      clearTimeout(timeout)
+      child.stdout?.off('data', handleData)
+      child.stderr?.off('data', handleData)
+      resolve({ process: child })
+    }
+
+    const onError = (error: Error) => {
+      clearTimeout(timeout)
+      reject(new Error(`Failed to start cloudflared named tunnel: ${error.message}`))
+    }
+
+    child.once('error', onError)
+    child.stdout?.on('data', handleData)
+    child.stderr?.on('data', handleData)
+
+    child.once('exit', (code) => {
+      clearTimeout(timeout)
+      if (code !== null && code !== 0) {
+        reject(new Error(`cloudflared exited with code ${String(code)} before connecting`))
+      }
+    })
+  })
+}
+
 function listenWithFallback(server: ReturnType<typeof createServer>, startPort: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const attempt = (port: number) => {
@@ -480,6 +529,8 @@ async function startServer(options: {
   sandboxMode?: string
   approvalPolicy?: string
   projectPath?: string
+  tunnelToken?: string
+  tunnelHostname?: string
 }) {
   const version = await readCliVersion()
   const projectPath = options.projectPath?.trim() ?? ''
