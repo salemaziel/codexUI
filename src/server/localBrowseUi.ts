@@ -423,8 +423,7 @@ export async function createTextEditorHtml(localPath: string): Promise<string> {
           csrfToken = tokenData.token || '';
         }
       } catch (_) {
-        status.textContent = 'Save failed: could not retrieve security token';
-        return;
+        // The check below will handle the failure.
       }
       if (!csrfToken) {
         status.textContent = 'Save failed: could not retrieve security token';

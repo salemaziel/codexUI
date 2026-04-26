@@ -566,7 +566,8 @@ async function startServer(options: {
   }
   const requestedPort = parseInt(options.port, 10)
   const password = resolvePassword(options.password)
-  const { app, dispose, attachWebSocket } = createApp({ password, localFsRoot: homedir() })
+  const fsRoot = projectPath ? (isAbsolute(projectPath) ? projectPath : resolve(projectPath)) : homedir()
+  const { app, dispose, attachWebSocket } = createApp({ password, localFsRoot: fsRoot })
   const server = createServer(app)
   attachWebSocket(server)
   const port = await listenWithFallback(server, requestedPort)

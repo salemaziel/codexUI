@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { Server as HttpServer, IncomingMessage } from 'node:http'
 import { existsSync } from 'node:fs'
 import { writeFile, stat, realpath } from 'node:fs/promises'
@@ -115,7 +115,11 @@ const CSRF_HEADER = 'x-codex-csrf'
 
 function requireCsrf(req: Request, res: Response, next: NextFunction): void {
   const provided = req.headers[CSRF_HEADER]
-  if (typeof provided === 'string' && provided === CSRF_TOKEN) {
+  if (
+    typeof provided === 'string' &&
+    provided.length === CSRF_TOKEN.length &&
+    timingSafeEqual(Buffer.from(provided), Buffer.from(CSRF_TOKEN))
+  ) {
     next()
     return
   }
