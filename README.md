@@ -40,17 +40,8 @@ You run one command. It starts a local web server. You open it from your machine
 npx codexapp
 
 # 🌐 Then open in browser
-# http://localhost:18923
+# http://localhost:5900
 ```
-
-By default, `codexapp` now also starts:
-
-```bash
-cloudflared tunnel --url http://localhost:<port>
-```
-
-It prints the tunnel URL, terminal QR code, and password together in startup output.  
-Use `--no-tunnel` to disable this behavior.
 
 If you are using a provider or AI gateway that is already authenticated and do not want `codexapp` to force `codex login` during startup, use:
 
@@ -87,6 +78,76 @@ Android background requirements:
 termux-wake-lock
 ```
 5. Open the shown URL in your Android browser. If the app is killed, return to Termux and run `npx codexapp` again.
+
+---
+
+## 🌐 Cloudflared Tunnel
+
+`codexapp` can automatically start a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) so you can reach the UI from any device without opening firewall ports.
+
+### Auto-detection behavior
+
+- If a **Tailscale IP** is detected on your machine, the tunnel is **disabled by default** (Tailscale Serve is a better fit — see section below).
+- If no Tailscale IP is detected and you do not pass `--no-tunnel`, a **quick tunnel** is started automatically.
+- You can always override with `--tunnel` (force on) or `--no-tunnel` (force off).
+
+### Quick tunnel (temporary public URL)
+
+A quick tunnel gives you a randomly generated `*.trycloudflare.com` URL that is valid only while `codexapp` is running.  
+No Cloudflare account required.
+
+```bash
+npx codexapp --tunnel
+```
+
+On startup you will see:
+
+```
+  Tunnel:   https://random-words-here.trycloudflare.com
+  Tunnel QR code below
+  [QR code printed in terminal]
+```
+
+### Named tunnel (stable custom hostname)
+
+For a permanent, stable public URL tied to your own domain, use a named tunnel from the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/).
+
+1. In the dashboard: **Networks → Tunnels → Create a tunnel** → copy the tunnel token.
+2. Configure the public hostname in the dashboard (e.g. `myapp.example.com → localhost:<port>`).
+3. Run:
+
+```bash
+npx codexapp --tunnel-token <your-tunnel-token>
+# Optionally supply the hostname for QR-code display:
+npx codexapp --tunnel-token <your-tunnel-token> --tunnel-hostname myapp.example.com
+```
+
+Or use environment variables instead of flags:
+
+```bash
+export CODEXUI_CLOUDFLARE_TUNNEL_TOKEN="<your-tunnel-token>"
+export CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME="myapp.example.com"   # optional
+npx codexapp
+```
+
+When a named tunnel connects you will see:
+
+```
+[cloudflared] Named tunnel connected. Public hostname is configured in your Cloudflare dashboard.
+```
+
+(If `--tunnel-hostname` / `CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME` is also supplied, a QR code is printed for that hostname.)
+
+### Disabling the tunnel
+
+```bash
+npx codexapp --no-tunnel
+```
+
+### cloudflared auto-install (Linux)
+
+If `cloudflared` is not found on Linux, `codexapp` will offer to download it automatically to `~/.local/bin/cloudflared` (x64 and arm64 are supported).  
+On Windows, install `cloudflared` manually: <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/>
 
 ---
 
@@ -129,13 +190,18 @@ Notes:
 
 - 🚀 One-command launch with `npx codexapp`
 - 🌍 Cross-platform support for Linux, Windows, and Termux on Android
-- 🖥️ Browser-first Codex UI flow on `http://localhost:18923`
+- 🖥️ Browser-first Codex UI flow on `http://localhost:5900` (default port)
 - 🌐 LAN-friendly access from other devices on the same network
 - 🧪 Remote/headless-friendly setup for server-based Codex usage
 - 🔌 Works with reverse proxies and tunneling setups
 - ⚡ No global install required for quick experimentation
 - 🎙️ Built-in hold-to-dictate voice input with transcription to composer draft
 - 🤖 Optional Telegram bot bridge: send messages to bot, forward into mapped thread, send assistant reply back to Telegram
+- 🌐 Cloudflared quick-tunnel (temporary `*.trycloudflare.com` URL) — starts automatically when no Tailscale IP is detected
+- 🔐 Named Cloudflare tunnel support via `--tunnel-token` / `CODEXUI_CLOUDFLARE_TUNNEL_TOKEN`
+- 🛡️ CSRF protection on all state-mutating endpoints (per-process token)
+- 🔒 Filesystem path restriction: file access scoped to the launch project directory (or `$HOME` by default)
+- 🔒 Sensitive paths (`.ssh`, `.aws`, `.codex/auth.json`, etc.) are blocked regardless of filesystem root
 
 ### Telegram Bot Bridge (Optional)
 
@@ -175,6 +241,9 @@ Outgoing assistant messages are sent with Telegram `parse_mode=HTML` for formatt
 ## 🧩 Recent Product Features (from main commits)
 > **Not just launch. Actual UX upgrades.**
 
+- 🛡️ Security hardening: removed password-in-URL auth, dropped Firebase dependency, added CSRF protection on mutating endpoints, filesystem path restriction scoped to launch project / `$HOME`, symlink bypass prevention, sensitive path denylist (`.ssh`, `.aws`, `.codex/auth.json`, …)
+- 🌐 Cloudflared quick-tunnel auto-starts when no Tailscale IP is detected (prints URL + QR code)
+- 🔐 Named Cloudflare tunnel via `--tunnel-token` / `--tunnel-hostname` flags (or env vars) for stable custom hostnames
 - 🗂️ Searchable project picker in new-thread flow
 - ➕ "Create Project" button next to "Select folder" with browser prompt
 - 📌 New projects get pinned to top automatically
@@ -186,6 +255,37 @@ Outgoing assistant messages are sent with Telegram `parse_mode=HTML` for formatt
 - 🪟 Skill detail modal tuned for mobile sheet-style behavior
 - 🧪 Skills Hub event typing fix for `SkillCard` select emit compatibility
 - 🎙️ Voice dictation flow in composer (`hold to dictate` -> transcribe -> append text)
+
+---
+
+## 🎛️ CLI Flags Reference
+
+| Flag | Default | Description |
+|---|---|---|
+| `[projectPath]` | — | Project directory to open on launch |
+| `--open-project <path>` | — | Add a project to the sidebar without starting the server |
+| `-p, --port <port>` | `5900` | Port to listen on (auto-increments if busy) |
+| `--password <pass>` | auto-generated | Set a specific password |
+| `--no-password` | — | Disable password protection |
+| `--tunnel` | auto | Force-enable cloudflared tunnel |
+| `--no-tunnel` | — | Disable cloudflared tunnel |
+| `--tunnel-token <token>` | — | Named tunnel token from Cloudflare Zero Trust dashboard |
+| `--tunnel-hostname <host>` | — | Public hostname for the named tunnel (for QR display) |
+| `--open` / `--no-open` | `--open` | Open browser on startup |
+| `--login` / `--no-login` | `--login` | Run `codex login` bootstrap if not already authenticated |
+| `--sandbox-mode <mode>` | — | `read-only`, `workspace-write`, or `danger-full-access` |
+| `--approval-policy <policy>` | — | `untrusted`, `on-failure`, `on-request`, or `never` |
+
+### Environment Variables
+
+| Variable | Description |
+|---|---|
+| `CODEXUI_CLOUDFLARE_TUNNEL_TOKEN` | Named-tunnel token (same as `--tunnel-token`) |
+| `CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME` | Public hostname for display/QR (same as `--tunnel-hostname`) |
+| `CODEX_HOME` | Override Codex home directory (default: `~/.codex`) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for the bot bridge |
+| `TELEGRAM_ALLOWED_USER_IDS` | Comma-separated allowlisted Telegram user IDs |
+| `TELEGRAM_DEFAULT_CWD` | Default working directory for Telegram-initiated threads |
 
 ---
 
@@ -253,6 +353,11 @@ Outgoing assistant messages are sent with Telegram `parse_mode=HTML` for formatt
 | `npx` fails | Update npm/node, then retry |
 | Termux install fails | `pkg update && pkg upgrade` then reinstall `nodejs` |
 | Can’t open from other device | Check firewall, bind address, and LAN routing |
+| Tunnel URL never prints | Check if `cloudflared` is installed; run with `--no-tunnel` to skip |
+| Named tunnel doesn’t connect | Verify token from Cloudflare Zero Trust dashboard and that the tunnel is active there |
+| `cloudflared` install prompt not shown | Non-interactive terminal or already prompted once — install manually from <https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/> |
+| “Path is outside the permitted filesystem root” | File is outside the launch project directory — start with a broader `projectPath` or omit it to default to `$HOME` |
+| “Access to this path is not allowed” | Requested path matches the sensitive-path denylist (`.ssh`, `.aws`, `.codex/auth.json`, etc.) — this is intentional |
 
 ---
 
