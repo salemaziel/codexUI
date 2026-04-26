@@ -285,11 +285,6 @@ function openBrowser(url: string): void {
   child.unref()
 }
 
-function buildTunnelAutologinUrl(tunnelUrl: string, password: string | undefined): string {
-  if (!password) return tunnelUrl
-  return `${tunnelUrl}/password=${encodeURIComponent(password)}`
-}
-
 function parseCloudflaredUrl(chunk: string): string | null {
   const urlMatch = chunk.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g)
   if (!urlMatch || urlMatch.length === 0) {
@@ -512,7 +507,7 @@ async function startServer(options: {
   }
   const requestedPort = parseInt(options.port, 10)
   const password = resolvePassword(options.password)
-  const { app, dispose, attachWebSocket } = createApp({ password })
+  const { app, dispose, attachWebSocket } = createApp({ password, localFsRoot: homedir() })
   const server = createServer(app)
   attachWebSocket(server)
   const port = await listenWithFallback(server, requestedPort)
@@ -559,9 +554,9 @@ async function startServer(options: {
   if (password) {
     lines.push(`  Password: ${password}`)
   }
-  const tunnelQrUrl = tunnelUrl ? buildTunnelAutologinUrl(tunnelUrl, password) : null
+  const tunnelQrUrl = tunnelUrl
   if (tunnelUrl) {
-    lines.push(`  Tunnel:   ${tunnelQrUrl ?? tunnelUrl}`)
+    lines.push(`  Tunnel:   ${tunnelUrl}`)
     lines.push('  Tunnel QR code below')
   }
 
