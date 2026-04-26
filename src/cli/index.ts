@@ -285,11 +285,6 @@ function openBrowser(url: string): void {
   child.unref()
 }
 
-function buildTunnelAutologinUrl(tunnelUrl: string, password: string | undefined): string {
-  if (!password) return tunnelUrl
-  return `${tunnelUrl}/password=${encodeURIComponent(password)}`
-}
-
 function parseCloudflaredUrl(chunk: string): string | null {
   const urlMatch = chunk.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g)
   if (!urlMatch || urlMatch.length === 0) {
@@ -392,6 +387,63 @@ async function startCloudflaredTunnel(command: string, localPort: number): Promi
   })
 }
 
+/**
+ * Start a named Cloudflare tunnel using a tunnel token obtained from the
+ * Cloudflare Zero Trust dashboard (Tunnels → your tunnel → Configure → token).
+ * The public hostname is configured in the dashboard, not derived from stdout.
+ */
+async function startNamedCloudflaredTunnel(command: string, token: string): Promise<{
+  process: ReturnType<typeof spawn>
+}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ['tunnel', 'run', '--token', token], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    // Resolve as soon as cloudflared reports a registered connection; reject on
+    // early exit or hard timeout (30s to account for slower auth handshakes).
+    let settled = false
+
+    const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill('SIGTERM')
+      reject(new Error('Timed out waiting for named cloudflared tunnel to connect'))
+    }, 30000)
+
+    const CONNECTED_RE = /registered tunnel connection|connected to cloudflare/iu
+
+    const handleData = (value: Buffer | string) => {
+      const text = String(value)
+      if (!CONNECTED_RE.test(text)) return
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      child.stdout?.off('data', handleData)
+      child.stderr?.off('data', handleData)
+      resolve({ process: child })
+    }
+
+    const onError = (error: Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(new Error(`Failed to start cloudflared named tunnel: ${error.message}`))
+    }
+
+    child.once('error', onError)
+    child.stdout?.on('data', handleData)
+    child.stderr?.on('data', handleData)
+
+    child.once('exit', (code, signal) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(new Error(`cloudflared exited before connecting (code: ${String(code)}, signal: ${String(signal)})`))
+    })
+  })
+}
+
 function listenWithFallback(server: ReturnType<typeof createServer>, startPort: number): Promise<number> {
   return new Promise((resolve, reject) => {
     const attempt = (port: number) => {
@@ -485,6 +537,8 @@ async function startServer(options: {
   sandboxMode?: string
   approvalPolicy?: string
   projectPath?: string
+  tunnelToken?: string
+  tunnelHostname?: string
 }) {
   const version = await readCliVersion()
   const projectPath = options.projectPath?.trim() ?? ''
@@ -512,14 +566,39 @@ async function startServer(options: {
   }
   const requestedPort = parseInt(options.port, 10)
   const password = resolvePassword(options.password)
-  const { app, dispose, attachWebSocket } = createApp({ password })
+  const fsRoot = projectPath ? (isAbsolute(projectPath) ? projectPath : resolve(projectPath)) : homedir()
+  const { app, dispose, attachWebSocket } = createApp({ password, localFsRoot: fsRoot })
   const server = createServer(app)
   attachWebSocket(server)
   const port = await listenWithFallback(server, requestedPort)
   let tunnelChild: ReturnType<typeof spawn> | null = null
   let tunnelUrl: string | null = null
 
-  if (options.tunnel) {
+  const effectiveTunnelToken = options.tunnelToken ?? process.env.CODEXUI_CLOUDFLARE_TUNNEL_TOKEN
+  const effectiveTunnelHostname = options.tunnelHostname ?? process.env.CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME
+
+  if (effectiveTunnelToken && options.tunnel) {
+    // Named tunnel: token supplied by the user from the Cloudflare dashboard.
+    // The public hostname is configured there; we only need to connect.
+    try {
+      const cloudflaredCommand = await resolveCloudflaredForTunnel()
+      if (!cloudflaredCommand) {
+        throw new Error('cloudflared is not installed')
+      }
+      const tunnel = await startNamedCloudflaredTunnel(cloudflaredCommand, effectiveTunnelToken)
+      tunnelChild = tunnel.process
+      // Use the user-supplied hostname for display/QR if provided.
+      tunnelUrl = effectiveTunnelHostname
+        ? (effectiveTunnelHostname.startsWith('http') ? effectiveTunnelHostname : `https://${effectiveTunnelHostname}`)
+        : null
+      if (!tunnelUrl) {
+        console.log('[cloudflared] Named tunnel connected. Public hostname is configured in your Cloudflare dashboard.')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`\n[cloudflared] Named tunnel not started: ${message}`)
+    }
+  } else if (options.tunnel) {
     try {
       const cloudflaredCommand = await resolveCloudflaredForTunnel()
       if (!cloudflaredCommand) {
@@ -559,9 +638,9 @@ async function startServer(options: {
   if (password) {
     lines.push(`  Password: ${password}`)
   }
-  const tunnelQrUrl = tunnelUrl ? buildTunnelAutologinUrl(tunnelUrl, password) : null
+  const tunnelQrUrl = tunnelUrl
   if (tunnelUrl) {
-    lines.push(`  Tunnel:   ${tunnelQrUrl ?? tunnelUrl}`)
+    lines.push(`  Tunnel:   ${tunnelUrl}`)
     lines.push('  Tunnel QR code below')
   }
 
@@ -615,6 +694,8 @@ program
   .option('--no-login', 'skip automatic Codex login bootstrap')
   .option('--sandbox-mode <mode>', 'Codex sandbox mode: read-only, workspace-write, danger-full-access')
   .option('--approval-policy <policy>', 'Codex approval policy: untrusted, on-failure, on-request, never')
+  .option('--tunnel-token <token>', 'Cloudflare named-tunnel token (from your Zero Trust dashboard). Overrides CODEXUI_CLOUDFLARE_TUNNEL_TOKEN env var.')
+  .option('--tunnel-hostname <hostname>', 'Public hostname for the named tunnel (e.g. myapp.example.com). Overrides CODEXUI_CLOUDFLARE_TUNNEL_HOSTNAME env var.')
   .action(async (
     projectPath: string | undefined,
     opts: {
@@ -626,6 +707,8 @@ program
       sandboxMode?: string
       approvalPolicy?: string
       openProject?: string
+      tunnelToken?: string
+      tunnelHostname?: string
     },
   ) => {
     const rawArgv = process.argv.slice(2)

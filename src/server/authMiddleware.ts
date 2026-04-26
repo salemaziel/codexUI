@@ -271,20 +271,6 @@ export function createAuthSession(password: string): AuthSession {
       return
     }
 
-    // Handle one-click auth links like /password=<value>
-    if (req.method === 'GET' && req.path.startsWith('/password=')) {
-      const provided = req.path.slice('/password='.length)
-      if (constantTimeCompare(provided, password)) {
-        const token = randomBytes(32).toString('hex')
-        const expiresAt = Date.now() + SESSION_TTL_MS
-        validTokens.set(token, expiresAt)
-        tryPersistSessions(validTokens)
-        res.setHeader('Set-Cookie', buildSessionCookie(token, expiresAt))
-        res.redirect(302, '/')
-        return
-      }
-    }
-
     // No valid session — serve login page
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.status(200).send(LOGIN_PAGE_HTML)

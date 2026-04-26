@@ -415,9 +415,23 @@ export async function createTextEditorHtml(localPath: string): Promise<string> {
 
     saveBtn.addEventListener('click', async () => {
       status.textContent = 'Saving...';
+      let csrfToken = '';
+      try {
+        const tokenResp = await fetch('/codex-api/csrf-token');
+        if (tokenResp.ok) {
+          const tokenData = await tokenResp.json();
+          csrfToken = tokenData.token || '';
+        }
+      } catch (_) {
+        // The check below will handle the failure.
+      }
+      if (!csrfToken) {
+        status.textContent = 'Save failed: could not retrieve security token';
+        return;
+      }
       const response = await fetch(location.pathname, {
         method: 'PUT',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Codex-CSRF': csrfToken },
         body: editor.getValue(),
       });
       status.textContent = response.ok ? 'Saved' : 'Save failed';
