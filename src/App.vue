@@ -2747,7 +2747,7 @@ function onRollback(payload: { turnId: string }): void {
   void rollbackSelectedThread(payload.turnId)
 }
 
-function onImplementPlan(payload: { turnId: string; planText: string }): void {
+function onImplementPlan(payload: { planText: string }): void {
   if (isHomeRoute.value || !selectedThreadId.value) return
   setSelectedCollaborationMode('default')
   scheduleMobileConversationJumpToLatest()

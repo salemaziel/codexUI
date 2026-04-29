@@ -958,7 +958,7 @@ function implementPlan(message: UiMessage): void {
   if (!turnId) return
   const planData = readPlanData(message)
   const planText = planData ? buildPlanMessageText(planData.explanation, planData.steps) : ''
-  emit('implementPlan', { turnId, planText })
+  emit('implementPlan', { planText })
 }
 
 function isFileChangeMessage(message: UiMessage): boolean {
@@ -1230,7 +1230,7 @@ const emit = defineEmits<{
   updateScrollState: [payload: { threadId: string; state: ThreadScrollState }]
   forkThread: [payload: { threadId: string; turnIndex: number }]
   rollback: [payload: { turnId: string }]
-  implementPlan: [payload: { turnId: string; planText: string }]
+  implementPlan: [payload: { planText: string }]
   respondServerRequest: [payload: { id: number; result?: unknown; error?: { code?: number; message: string } }]
 }>()
 
